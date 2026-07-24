@@ -52,6 +52,7 @@ def run_agent(user_message: str, history: list[dict] | None = None) -> dict:
     ]
     order_sheet = None
     menu_board = None
+    nudged = False
 
     for _ in range(MAX_TURNS):
         response = complete(messages, tools=TOOL_SCHEMAS)
@@ -59,9 +60,19 @@ def run_agent(user_message: str, history: list[dict] | None = None) -> dict:
 
         # 도구 호출이 없으면 모델이 답을 확정한 것 — 루프를 멈춥니다
         if not message.tool_calls:
-            final = {"message": (message.content or "").strip()}
+            content = (message.content or "").strip()
+            # 가드레일 — 보여줄 것(주문서·메뉴판)도 없는데 빈 답이 오면 한 번 재지시
+            if not content and not order_sheet and menu_board is None and not nudged:
+                nudged = True
+                messages.append(
+                    {"role": "user", "content": "방금 확인한 내용을 손님에게 한두 문장으로 말해 주세요."}
+                )
+                continue
+            final = {"message": content}
             if order_sheet:
                 final.update(order_sheet)  # items, total
+                if not final["message"]:
+                    final["message"] = "주문이 완료되었습니다. 감사합니다!"
             # 가드레일 — 메뉴판 요청인데 모델이 도구를 안 불렀어도 메뉴판은 뜬다.
             # 결정적으로 처리할 수 있는 UX를 확률적 컴포넌트에만 맡기지 않습니다.
             if menu_board is None and _wants_menu_board(user_message):
