@@ -1,4 +1,9 @@
-"""재고 확인·차감 — data/stock.json을 읽고, 주문 확정 시 차감해 기록합니다."""
+"""재고 확인·차감 — 시드는 읽기 전용, 런타임 상태는 별도 파일에 기록합니다.
+
+data/stock.json은 커밋된 초기 재고(시드)로 런타임에 절대 쓰지 않습니다.
+차감된 현재 재고는 gitignore된 data/stock.state.json에 쌓입니다 —
+상태 파일이 없으면 시드에서 시작하고, 지우면 초기화됩니다.
+"""
 
 import json
 import threading
@@ -6,9 +11,11 @@ from pathlib import Path
 
 from tools.menu import load_menu
 
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "stock.json"
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+SEED_PATH = _DATA_DIR / "stock.json"  # 초기 재고 (커밋됨, 읽기 전용)
+STATE_PATH = _DATA_DIR / "stock.state.json"  # 런타임 재고 (gitignore)
 
-# 재고 파일의 읽기-수정-쓰기를 잠급니다 — 동시 주문이 같은 재고를 두 번 가져가지 못하게
+# 재고의 읽기-수정-쓰기를 잠급니다 — 동시 주문이 같은 재고를 두 번 가져가지 못하게
 _lock = threading.Lock()
 
 SCHEMA = {
@@ -36,13 +43,20 @@ SCHEMA = {
 
 
 def load_stock() -> dict:
-    return json.loads(DATA_PATH.read_text(encoding="utf-8"))
+    path = STATE_PATH if STATE_PATH.exists() else SEED_PATH
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def save_stock(stock: dict) -> None:
-    DATA_PATH.write_text(
+    STATE_PATH.write_text(
         json.dumps(stock, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+
+
+def reset_stock() -> None:
+    """런타임 상태를 버리고 시드 재고로 되돌립니다."""
+    with _lock:
+        STATE_PATH.unlink(missing_ok=True)
 
 
 def deduct_stock(entries: list[dict]) -> dict | None:

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from agent import session
 from agent.loop import run_agent
+from tools.stock import reset_stock
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = BASE_DIR / ".env"
@@ -55,6 +56,13 @@ def order(request: OrderRequest) -> dict:
 def clear_session(session_id: str) -> dict:
     """웹의 /clear 명령 — 세션 대화 이력을 지웁니다."""
     return {"cleared": session.clear(session_id)}
+
+
+@app.post("/stock/reset")
+def stock_reset() -> dict:
+    """웹의 /reset 명령 — 재고를 시드(data/stock.json) 상태로 되돌립니다."""
+    reset_stock()
+    return {"reset": True}
 
 
 def _settings_view() -> dict:

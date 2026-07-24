@@ -33,7 +33,7 @@ week01-order-agent
 │   └── index.html       # 웹 주문 화면 (채팅형 UI, /order 호출)
 ├── data/
 │   ├── menu.json        # 메뉴 22개 (이름·가격·옵션)
-│   └── stock.json       # 재고 수량
+│   └── stock.json       # 재고 시드 — 런타임 상태는 stock.state.json (gitignore)
 ├── .env.example         # GEMINI_API_KEY, MODEL
 ├── pyproject.toml       # litellm, fastapi 등 의존성 선언
 ├── PROMPT.md            # 시연에서 사용한 지시 프롬프트 원문
@@ -85,6 +85,7 @@ docker compose -f compose.dev.yml up --build
   현재 세션 id는 입력창 아래에 표시됩니다 (30분 미사용 시 만료)
 - 메뉴판을 요청하면 카테고리별 표로 보여줍니다
 - 입력창에 `/clear`를 치면 서버의 세션 이력까지 지우고 새 대화를 시작합니다
+- `/reset`을 치면 주문으로 차감된 재고가 처음 상태로 돌아갑니다
 - 오른쪽 위 **⚙️ 설정** 버튼에서 `.env`의 `GEMINI_API_KEY`, `MODEL`을
   확인·저장할 수 있습니다. 저장하면 서버의 `.env`에 기록되고 즉시 적용됩니다
   (개발 모드에서는 호스트의 `.env` 파일에 그대로 남습니다). 로컬 시연용
@@ -114,13 +115,12 @@ curl -s -X POST http://localhost:8000/order \
 메뉴에 없는 항목("돈까스 되나요?")이나 재고 초과("김밥 100줄")는 정중히
 거절하고 대안을 제시합니다.
 
-주문이 확정되면 그 수량만큼 `data/stock.json`의 재고가 차감되어 기록됩니다
-(동시 주문은 잠금으로 보호, 전량 확보가 안 되면 아무것도 차감하지 않음).
-재고를 처음 상태로 되돌리려면:
+주문이 확정되면 그 수량만큼 재고가 차감됩니다 (동시 주문은 잠금으로 보호,
+전량 확보가 안 되면 아무것도 차감하지 않음). `data/stock.json`은 초기
+재고(시드)라 변하지 않고, 차감된 현재 재고는 gitignore된
+`data/stock.state.json`에 기록됩니다 — 저장소는 항상 깨끗하게 유지됩니다.
 
-```bash
-git checkout -- data/stock.json
-```
+재고 초기화: 채팅에 `/reset` 입력 (또는 `POST /stock/reset`, 상태 파일 삭제)
 
 응답의 `session_id`를 다음 요청에 그대로 넣으면 대화가 이어집니다
 (웹 화면은 자동으로 처리합니다). `DELETE /session/{session_id}`로 이력을

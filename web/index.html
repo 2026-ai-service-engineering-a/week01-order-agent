@@ -207,6 +207,7 @@
       <button type="button">김밥 100줄 주세요</button>
       <button type="button">순대 1인분 주세요</button>
       <button type="button">/clear</button>
+      <button type="button">/reset</button>
     </div>
 
     <form id="order-form">
@@ -358,8 +359,15 @@
         setSession(null);
         chat.replaceChildren();
         addBubble("clerk", GREETING);
+      } else if (command === "/reset") {
+        try {
+          await fetch("/stock/reset", { method: "POST" });
+          addBubble("clerk", "재고를 처음 상태로 되돌렸어요.");
+        } catch (err) {
+          addBubble("clerk", "재고 초기화에 실패했어요: " + err);
+        }
       } else {
-        addBubble("clerk", "알 수 없는 명령이에요. 사용할 수 있는 명령: /clear");
+        addBubble("clerk", "알 수 없는 명령이에요. 사용할 수 있는 명령: /clear(대화 초기화), /reset(재고 초기화)");
       }
     }
 
