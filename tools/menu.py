@@ -33,11 +33,15 @@ def load_menu() -> list[dict]:
     return json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
 
+# 이 검색어들은 "메뉴판 전체"를 뜻합니다 — 모델이 어떤 표현으로 부르든 받아줍니다
+FULL_MENU_QUERIES = {"", "메뉴", "메뉴판", "전체", "전체 메뉴", "전체메뉴", "all", "menu"}
+
+
 def search_menu(query: str = "") -> dict:
     menu = load_menu()
     q = (query or "").strip().lower()
-    if not q:  # 검색어 없음 = 메뉴판 전체
-        return {"found": True, "results": menu}
+    if q in FULL_MENU_QUERIES:  # 메뉴판 전체 — board 플래그로 표시
+        return {"found": True, "board": True, "results": menu}
     results = [
         item
         for item in menu

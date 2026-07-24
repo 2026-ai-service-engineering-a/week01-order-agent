@@ -1,18 +1,19 @@
-"""주문서 생성 — 항목·옵션·합계를 계산해 주문서 json을 만듭니다.
+"""주문서 생성 — 항목·옵션·합계를 계산하고 재고를 차감해 주문서 json을 만듭니다.
 
 단가와 합계는 모델이 아니라 이 코드가 메뉴판 기준으로 계산합니다.
-LLM은 항목을 고르고, 돈 계산은 결정적인 코드가 맡습니다.
+LLM은 항목을 고르고, 돈 계산과 재고 차감은 결정적인 코드가 맡습니다.
 """
 
 from tools.menu import load_menu
-from tools.stock import load_stock
+from tools.stock import deduct_stock
 
 SCHEMA = {
     "type": "function",
     "function": {
         "name": "create_order",
         "description": (
-            "확정된 주문 항목들로 주문서를 만든다. 단가·합계는 메뉴판 기준으로 계산된다. "
+            "확정된 주문 항목들로 주문서를 만들고, 그 수량만큼 재고를 차감한다. "
+            "단가·합계는 메뉴판 기준으로 계산된다. "
             "메뉴 확인(search_menu)과 재고 확인(check_stock)을 마친 뒤 마지막에 호출한다."
         ),
         "parameters": {
@@ -47,9 +48,9 @@ SCHEMA = {
 
 def create_order(items: list[dict]) -> dict:
     menu = {m["id"]: m for m in load_menu()}
-    stock = load_stock()
 
     order_items = []
+    deduct_entries = []
     total = 0
     for entry in items:
         item = menu.get(entry.get("menu_id"))
@@ -59,11 +60,6 @@ def create_order(items: list[dict]) -> dict:
         quantity = int(entry.get("quantity", 0))
         if quantity < 1:
             return {"error": f"{item['name']}: 수량이 올바르지 않습니다 ({quantity})"}
-
-        # 재고를 한 번 더 확인합니다 — 모델이 확인을 건너뛰어도 코드가 막는 가드레일
-        remaining = stock.get(item["id"], 0)
-        if remaining < quantity:
-            return {"error": f"{item['name']}: 재고 부족 (남은 수량 {remaining})"}
 
         option_prices = {o["name"]: o["price"] for o in item["options"]}
         options = entry.get("options") or []
@@ -84,6 +80,15 @@ def create_order(items: list[dict]) -> dict:
                 "subtotal": subtotal,
             }
         )
+        deduct_entries.append(
+            {"menu_id": item["id"], "name": item["name"], "quantity": quantity}
+        )
         total += subtotal
 
-    return {"items": order_items, "total": total}
+    # 주문 확정 = 재고 차감 — 전량 확보가 안 되면 주문 자체가 성립하지 않습니다.
+    # 모델이 재고 확인을 건너뛰어도 여기서 막히는 가드레일이기도 합니다.
+    error = deduct_stock(deduct_entries)
+    if error:
+        return error
+
+    return {"items": order_items, "total": total, "stock_deducted": True}
