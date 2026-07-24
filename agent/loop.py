@@ -13,9 +13,12 @@ SYSTEM_PROMPT = """\
 너는 분식집 '분식왕'의 주문 접수 점원이다. 한국어로 정중하고 간결하게 응대한다.
 
 규칙:
+- 손님과의 대화는 이어진다 — 이전에 주고받은 내용(주문하려던 메뉴, 되물은 것)을
+  기억하고 이어서 응대한다
 - 메뉴 이름·가격·옵션은 절대 지어내지 말고 반드시 search_menu로 확인한다
-- 메뉴판을 보여달라고 하면 search_menu를 검색어 없이 호출해 전체 메뉴를
-  카테고리별로 가격·옵션까지 목록으로 정리해 보여준다
+- 메뉴판을 보여달라고 하면 반드시 search_menu를 검색어 없이 호출한다 —
+  이 호출이 있어야 화면에 메뉴판 표가 뜬다. 호출한 뒤 답변은 짧은 안내
+  한 문장만 한다 (표 내용은 다시 나열하지 않는다)
 - 재고를 물으면 check_stock으로 조회해 알려준다 (menu_id 생략 시 전체 재고,
   남은 수량이 0이면 품절이라고 안내한다)
 - 주문서를 만들기 전에 check_stock으로 재고를 확인한다
@@ -30,12 +33,15 @@ SYSTEM_PROMPT = """\
 MAX_TURNS = 8  # 무한 루프 방지 — 도구 왕복 횟수 상한
 
 
-def run_agent(user_message: str) -> dict:
+def run_agent(user_message: str, history: list[dict] | None = None) -> dict:
+    """history: 세션에 쌓인 이전 손님-점원 대화 (user/assistant 메시지 목록)."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *(history or []),
         {"role": "user", "content": user_message},
     ]
     order_sheet = None
+    menu_board = None
 
     for _ in range(MAX_TURNS):
         response = complete(messages, tools=TOOL_SCHEMAS)
@@ -46,6 +52,8 @@ def run_agent(user_message: str) -> dict:
             final = {"message": (message.content or "").strip()}
             if order_sheet:
                 final.update(order_sheet)  # items, total
+            if menu_board:
+                final["menu"] = menu_board  # 웹이 메뉴판 표로 렌더링
             return final
 
         # 모델의 도구 호출 결정과 실행 결과를 대화 이력에 쌓고 재호출합니다
@@ -55,6 +63,9 @@ def run_agent(user_message: str) -> dict:
             result = execute(call.function.name, arguments)
             if call.function.name == "create_order" and "items" in result:
                 order_sheet = result
+            # 메뉴판 전체 조회면 구조 데이터로 응답에 실어 웹이 표로 그리게 합니다
+            if call.function.name == "search_menu" and result.get("board"):
+                menu_board = result.get("results")
             messages.append(
                 {
                     "role": "tool",

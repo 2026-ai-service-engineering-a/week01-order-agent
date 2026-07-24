@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agent import session
 from agent.loop import run_agent
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,6 +20,7 @@ app = FastAPI(title="분식왕 주문 에이전트", version="0.1.0")
 
 class OrderRequest(BaseModel):
     message: str
+    session_id: str | None = None  # 이어지는 대화면 이전 응답의 session_id를 전달
 
 
 class SettingsUpdate(BaseModel):
@@ -28,11 +30,31 @@ class SettingsUpdate(BaseModel):
 
 @app.post("/order")
 def order(request: OrderRequest) -> dict:
+    session_id, history = session.get_history(request.session_id)
     try:
-        return run_agent(request.message)
+        result = run_agent(request.message, history)
     except Exception as exc:  # 시연용 — 실패 원인이 화면에 보이게 (첫 줄만)
         reason = str(exc).splitlines()[0] if str(exc) else repr(exc)
-        return {"message": "죄송합니다, 주문 처리 중 문제가 생겼어요.", "error": reason}
+        return {
+            "message": "죄송합니다, 주문 처리 중 문제가 생겼어요.",
+            "error": reason,
+            "session_id": session_id,
+        }
+    session.append(
+        session_id,
+        [
+            {"role": "user", "content": request.message},
+            {"role": "assistant", "content": result.get("message", "")},
+        ],
+    )
+    result["session_id"] = session_id
+    return result
+
+
+@app.delete("/session/{session_id}")
+def clear_session(session_id: str) -> dict:
+    """웹의 /clear 명령 — 세션 대화 이력을 지웁니다."""
+    return {"cleared": session.clear(session_id)}
 
 
 def _settings_view() -> dict:
