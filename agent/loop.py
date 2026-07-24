@@ -8,6 +8,7 @@ import json
 
 from llm.client import complete
 from tools import TOOL_SCHEMAS, execute
+from tools.menu import load_menu
 
 SYSTEM_PROMPT = """\
 너는 분식집 '분식왕'의 주문 접수 점원이다. 한국어로 정중하고 간결하게 응대한다.
@@ -32,6 +33,15 @@ SYSTEM_PROMPT = """\
 
 MAX_TURNS = 8  # 무한 루프 방지 — 도구 왕복 횟수 상한
 
+_MENU_WORDS = ("메뉴", "menu")
+_SHOW_WORDS = ("보여", "알려", "뭐", "무엇", "어떤", "있", "추천", "판")
+
+
+def _wants_menu_board(text: str) -> bool:
+    """'메뉴(판) 보여주세요' 류의 요청인지 — 가드레일용 단순 키워드 판별."""
+    t = text.lower()
+    return any(w in t for w in _MENU_WORDS) and any(w in t for w in _SHOW_WORDS)
+
 
 def run_agent(user_message: str, history: list[dict] | None = None) -> dict:
     """history: 세션에 쌓인 이전 손님-점원 대화 (user/assistant 메시지 목록)."""
@@ -52,8 +62,14 @@ def run_agent(user_message: str, history: list[dict] | None = None) -> dict:
             final = {"message": (message.content or "").strip()}
             if order_sheet:
                 final.update(order_sheet)  # items, total
+            # 가드레일 — 메뉴판 요청인데 모델이 도구를 안 불렀어도 메뉴판은 뜬다.
+            # 결정적으로 처리할 수 있는 UX를 확률적 컴포넌트에만 맡기지 않습니다.
+            if menu_board is None and _wants_menu_board(user_message):
+                menu_board = load_menu()
             if menu_board:
                 final["menu"] = menu_board  # 웹이 메뉴판 표로 렌더링
+                if not final["message"]:
+                    final["message"] = "분식왕 메뉴판입니다."
             return final
 
         # 모델의 도구 호출 결정과 실행 결과를 대화 이력에 쌓고 재호출합니다
