@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>분식왕 — 주문 접수</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+      background: #faf6f0;
+      color: #2b2320;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      width: 100%;
+      background: #d1372e;
+      color: #fff;
+      padding: 18px 24px;
+      text-align: center;
+    }
+    header h1 { font-size: 1.35rem; }
+    header p { font-size: 0.85rem; opacity: 0.85; margin-top: 4px; }
+    main {
+      width: 100%;
+      max-width: 640px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+    }
+    #chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 8px 0 16px;
+      overflow-y: auto;
+    }
+    .bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .user { align-self: flex-end; background: #d1372e; color: #fff; border-bottom-right-radius: 4px; }
+    .clerk { align-self: flex-start; background: #fff; border: 1px solid #e8ded2; border-bottom-left-radius: 4px; }
+    .clerk .receipt { margin-top: 8px; }
+    .receipt table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+    .receipt th, .receipt td { text-align: left; padding: 4px 8px; border-bottom: 1px dashed #e0d5c5; }
+    .receipt td.num, .receipt th.num { text-align: right; }
+    .receipt tr.total td { font-weight: 700; border-bottom: none; padding-top: 8px; }
+    .receipt .opts { color: #8a7a68; font-size: 0.8rem; }
+    pre.raw {
+      margin-top: 8px;
+      background: #f4efe7;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      overflow-x: auto;
+    }
+    #examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-bottom: 12px;
+    }
+    #examples button {
+      background: #fff;
+      border: 1px solid #e0cdb6;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: #6b5844;
+    }
+    #examples button:hover { background: #f7efe3; }
+    form { display: flex; gap: 8px; padding-bottom: 20px; }
+    #message {
+      flex: 1;
+      border: 1px solid #ddcdb8;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      outline: none;
+      background: #fff;
+    }
+    #message:focus { border-color: #d1372e; }
+    #send {
+      background: #d1372e;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 0 20px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #send:disabled { opacity: 0.5; cursor: wait; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🍜 분식왕</h1>
+    <p>주문 접수 AI 점원 — week01 라이브 빌드</p>
+  </header>
+
+  <main>
+    <div id="chat">
+      <div class="bubble clerk">어서오세요, 분식왕입니다! 주문을 말씀해 주세요.</div>
+    </div>
+
+    <div id="examples">
+      <button type="button">참치김밥 두 줄이랑 라면 하나, 라면은 치즈 추가</button>
+      <button type="button">돈까스 되나요?</button>
+      <button type="button">김밥 100줄 주세요</button>
+      <button type="button">순대 1인분 주세요</button>
+    </div>
+
+    <form id="order-form">
+      <input id="message" type="text" placeholder="예) 떡볶이 하나랑 어묵꼬치 두 개요" autocomplete="off" required />
+      <button id="send" type="submit">주문</button>
+    </form>
+  </main>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const form = document.getElementById("order-form");
+    const input = document.getElementById("message");
+    const send = document.getElementById("send");
+
+    function addBubble(cls, node) {
+      const div = document.createElement("div");
+      div.className = "bubble " + cls;
+      if (typeof node === "string") div.textContent = node;
+      else div.appendChild(node);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    // 주문서 json({items, total})이면 영수증으로, 아니면 메시지/원본 json으로 표시
+    function renderResponse(data) {
+      const wrap = document.createElement("div");
+      if (data.message) {
+        const p = document.createElement("div");
+        p.textContent = data.message;
+        wrap.appendChild(p);
+      }
+      if (Array.isArray(data.items) && data.items.length) {
+        const receipt = document.createElement("div");
+        receipt.className = "receipt";
+        const rows = data.items.map((it) => {
+          const opts = (it.options || []).map((o) => (typeof o === "string" ? o : o.name)).join(", ");
+          const price = it.subtotal ?? it.price ?? it.unit_price ?? "";
+          return `<tr>
+            <td>${it.name ?? it.menu ?? ""}<div class="opts">${opts}</div></td>
+            <td class="num">${it.quantity ?? it.qty ?? 1}</td>
+            <td class="num">${typeof price === "number" ? price.toLocaleString() + "원" : price}</td>
+          </tr>`;
+        }).join("");
+        const total = data.total ?? data.total_price;
+        receipt.innerHTML = `<table>
+          <tr><th>메뉴</th><th class="num">수량</th><th class="num">금액</th></tr>
+          ${rows}
+          ${total != null ? `<tr class="total"><td>합계</td><td></td><td class="num">${Number(total).toLocaleString()}원</td></tr>` : ""}
+        </table>`;
+        wrap.appendChild(receipt);
+      }
+      if (!data.message && !Array.isArray(data.items)) {
+        const pre = document.createElement("pre");
+        pre.className = "raw";
+        pre.textContent = JSON.stringify(data, null, 2);
+        wrap.appendChild(pre);
+      }
+      return wrap;
+    }
+
+    async function order(message) {
+      addBubble("user", message);
+      send.disabled = true;
+      const pending = addBubble("clerk", "접수 중…");
+      try {
+        const res = await fetch("/order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+        const data = await res.json();
+        pending.replaceChildren(renderResponse(data));
+      } catch (err) {
+        pending.textContent = "주문 접수에 실패했어요: " + err;
+      } finally {
+        send.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = "";
+      order(message);
+    });
+
+    document.querySelectorAll("#examples button").forEach((btn) => {
+      btn.addEventListener("click", () => order(btn.textContent));
+    });
+  </script>
+</body>
+</html>

@@ -20,6 +20,8 @@ git diff v0.1 v1.0
 week01-order-agent
 ├── app/
 │   └── main.py          # FastAPI 목 — /order가 고정 문자열 반환
+├── web/
+│   └── index.html       # 웹 주문 화면 (채팅형 UI, /order 호출)
 ├── data/
 │   ├── menu.json        # 메뉴 22개 (이름·가격·옵션)
 │   └── stock.json       # 재고 수량
@@ -27,7 +29,8 @@ week01-order-agent
 ├── pyproject.toml       # litellm, fastapi 등 의존성 선언 완료
 ├── PROMPT.md            # 자리만 (시연에서 지시 프롬프트를 작성)
 ├── Dockerfile
-├── compose.yml
+├── compose.yml          # 기본 실행
+├── compose.dev.yml      # 개발용 (소스 마운트 + 자동 리로드)
 └── README.md
 ```
 
@@ -47,14 +50,25 @@ cp .env.example .env
 
 ### 2. Docker Compose로 실행
 
+**기본 실행** — 이미지에 구운 코드를 그대로 실행합니다.
+
 ```bash
 docker compose up --build
 ```
 
-소스가 컨테이너에 마운트되고 `--reload`로 돌기 때문에, 코드가 바뀌면
-재빌드 없이 반영됩니다.
+**개발 모드** — 소스를 컨테이너에 마운트하고 `--reload`로 실행하므로,
+코드가 바뀌면 재빌드 없이 즉시 반영됩니다. 라이브 빌드는 이 모드로 진행합니다.
+
+```bash
+docker compose -f compose.dev.yml up --build
+```
 
 ### 3. 주문해 보기
+
+**웹 화면**: <http://localhost:8000> 에 접속해 채팅으로 주문합니다.
+예시 버튼(정상 주문·메뉴에 없는 항목·재고 초과)이 준비되어 있습니다.
+
+**curl**:
 
 ```bash
 curl -s -X POST http://localhost:8000/order \
