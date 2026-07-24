@@ -11,7 +11,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = BASE_DIR / ".env"
 load_dotenv(ENV_PATH)
 
 app = FastAPI(title="분식왕 주문 에이전트", version="0.1.0")
@@ -59,5 +60,6 @@ def update_settings(update: SettingsUpdate) -> dict:
     return _settings_view()
 
 
-# 웹 주문 화면 — API 라우트보다 뒤에 마운트해야 /order가 가려지지 않습니다
-app.mount("/", StaticFiles(directory="web", html=True), name="web")
+# 웹 주문 화면 — API 라우트보다 뒤에 마운트해야 /order가 가려지지 않습니다.
+# 경로는 이 파일 기준 절대 경로 — 어느 디렉터리에서 실행해도 동작합니다.
+app.mount("/", StaticFiles(directory=BASE_DIR / "web", html=True), name="web")
