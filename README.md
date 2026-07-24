@@ -14,28 +14,35 @@ Claude Code에 지시 프롬프트를 주어 **지시 → 생성 → 검증 → 
 git diff v0.1 v1.0
 ```
 
-## 구조 (v0.1)
+## 구조
 
 ```plaintext
 week01-order-agent
 ├── app/
-│   └── main.py          # FastAPI 목 — /order가 고정 문자열 반환
+│   └── main.py          # FastAPI — /order가 에이전트 루프 호출
+├── agent/
+│   └── loop.py          # 에이전트 루프 (도구 호출 여부를 모델이 결정)
+├── llm/
+│   └── client.py        # LiteLLM 래퍼 (MODEL 환경변수로 모델 교체)
+├── tools/
+│   ├── menu.py          # 메뉴 검색 — data/menu.json
+│   ├── stock.py         # 재고 확인 — data/stock.json
+│   └── order.py         # 주문서 생성 — 단가·합계는 코드가 계산
 ├── web/
 │   └── index.html       # 웹 주문 화면 (채팅형 UI, /order 호출)
 ├── data/
 │   ├── menu.json        # 메뉴 22개 (이름·가격·옵션)
 │   └── stock.json       # 재고 수량
 ├── .env.example         # GEMINI_API_KEY, MODEL
-├── pyproject.toml       # litellm, fastapi 등 의존성 선언 완료
-├── PROMPT.md            # 자리만 (시연에서 지시 프롬프트를 작성)
+├── pyproject.toml       # litellm, fastapi 등 의존성 선언
+├── PROMPT.md            # 시연에서 사용한 지시 프롬프트 원문
 ├── Dockerfile
 ├── compose.yml          # 기본 실행
 ├── compose.dev.yml      # 개발용 (소스 마운트 + 자동 리로드)
 └── README.md
 ```
 
-v1.0에서는 `agent/`(에이전트 루프), `llm/`(LiteLLM 래퍼), `tools/`(도구 3종)가
-추가됩니다.
+시연 시작점(목 API)은 `git checkout v0.1`로 볼 수 있습니다.
 
 ## 실행 방법
 
@@ -46,7 +53,11 @@ cp .env.example .env
 ```
 
 `.env`에 [Google AI Studio](https://aistudio.google.com/apikey)에서 발급한
-`GEMINI_API_KEY`를 채웁니다. v0.1 목 API는 키 없이도 동작합니다.
+`GEMINI_API_KEY`를 채웁니다. 파일 대신 웹 화면의 **⚙️ 설정** 버튼으로
+입력해도 됩니다. 키가 없으면 `/order` 호출이 인증 오류를 돌려줍니다.
+
+`MODEL`은 LiteLLM 모델 문자열입니다. 이 값만 바꾸면 코드 수정 없이
+다른 프로바이더로 전환됩니다 (예: `anthropic/claude-sonnet-5`, `ollama/llama3`).
 
 ### 2. Docker Compose로 실행
 
@@ -82,13 +93,21 @@ curl -s -X POST http://localhost:8000/order \
   -d '{"message": "참치김밥 두 줄이랑 라면 하나, 라면은 치즈 추가"}'
 ```
 
-v0.1 응답:
+응답 — 주문서 json (단가·합계는 모델이 아니라 `tools/order.py`가 계산):
 
 ```json
-{ "message": "죄송합니다, 아직 점원이 없어요" }
+{
+  "message": "참치김밥 두 줄과 치즈 추가 라면 하나, 총 13,500원입니다!",
+  "items": [
+    { "name": "참치김밥", "quantity": 2, "options": [], "unit_price": 4500, "subtotal": 9000 },
+    { "name": "라면", "quantity": 1, "options": ["치즈 추가"], "unit_price": 4500, "subtotal": 4500 }
+  ],
+  "total": 13500
+}
 ```
 
-지금 이 API는 거짓말을 합니다. 라이브 빌드에서 진짜 점원으로 교체됩니다.
+메뉴에 없는 항목("돈까스 되나요?")이나 재고 초과("김밥 100줄")는 정중히
+거절하고 대안을 제시합니다.
 
 ### (선택) 로컬에서 uv로 실행
 

@@ -1,7 +1,4 @@
-"""분식왕 주문 접수 API — v0.1 목(mock).
-
-/order는 아직 고정 응답만 돌려줍니다. 라이브 빌드에서 에이전트 루프로 교체됩니다.
-"""
+"""분식왕 주문 접수 API — /order가 에이전트 루프를 호출합니다."""
 
 import os
 from pathlib import Path
@@ -10,6 +7,8 @@ from dotenv import load_dotenv, set_key
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from agent.loop import run_agent
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = BASE_DIR / ".env"
@@ -29,7 +28,11 @@ class SettingsUpdate(BaseModel):
 
 @app.post("/order")
 def order(request: OrderRequest) -> dict:
-    return {"message": "죄송합니다, 아직 점원이 없어요"}
+    try:
+        return run_agent(request.message)
+    except Exception as exc:  # 시연용 — 실패 원인이 화면에 보이게 (첫 줄만)
+        reason = str(exc).splitlines()[0] if str(exc) else repr(exc)
+        return {"message": "죄송합니다, 주문 처리 중 문제가 생겼어요.", "error": reason}
 
 
 def _settings_view() -> dict:
