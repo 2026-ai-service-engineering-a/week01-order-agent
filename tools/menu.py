@@ -12,6 +12,7 @@ SCHEMA = {
         "description": (
             "메뉴판에서 메뉴를 검색한다. 이름 또는 카테고리"
             "(김밥/떡볶이/분식/면/식사/음료)의 일부로 찾는다. "
+            "검색어를 생략하면 전체 메뉴판을 반환한다 — 손님이 메뉴판을 보여달라고 하면 생략하고 호출한다. "
             "손님이 말한 메뉴가 있는지, 가격과 옵션이 무엇인지 반드시 이 도구로 확인한다."
         ),
         "parameters": {
@@ -19,10 +20,10 @@ SCHEMA = {
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "검색어 (예: '참치김밥', '라면', '김밥')",
+                    "description": "검색어 (예: '참치김밥', '라면'). 생략하면 전체 메뉴 반환",
                 }
             },
-            "required": ["query"],
+            "required": [],
         },
     },
 }
@@ -32,9 +33,11 @@ def load_menu() -> list[dict]:
     return json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
 
-def search_menu(query: str) -> dict:
+def search_menu(query: str = "") -> dict:
     menu = load_menu()
-    q = query.strip().lower()
+    q = (query or "").strip().lower()
+    if not q:  # 검색어 없음 = 메뉴판 전체
+        return {"found": True, "results": menu}
     results = [
         item
         for item in menu
