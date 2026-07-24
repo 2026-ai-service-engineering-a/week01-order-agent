@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    container_name: order-agent
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false # v0.1 목 API는 키 없이도 동작합니다
+    volumes:
+      - .:/app # 라이브 빌드 중 생성되는 코드가 재빌드 없이 반영됩니다
+    command: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
